@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工事受付表入力</title>
+<style>
+:root{--bg:#f3f4f6;--card:#fff;--line:#d5d9e0;--accent:#1f5fbf;--text:#222}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Hiragino Sans","Yu Gothic","Meiryo",sans-serif;background:var(--bg);color:var(--text);font-size:16px;font-weight:400}
+header{padding:14px 16px;background:var(--accent);color:#fff;font-size:18px}
+main{max-width:720px;margin:0 auto;padding:12px 12px 110px}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+h2{font-size:15px;margin:0 0 6px;color:var(--accent);font-weight:600}
+label{display:block;font-size:13px;color:#555;margin:10px 0 3px}
+input[type=text],input[type=date],select,textarea{width:100%;font-size:16px;padding:10px;border:1px solid #bfc5cf;border-radius:8px;background:#fff;font-family:inherit;color:var(--text)}
+textarea{resize:vertical}
+.row{display:flex;gap:8px}.row>div{flex:1;min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{position:relative}
+.chip input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.chip span{display:block;padding:9px 13px;border:1px solid #bfc5cf;border-radius:20px;background:#fff;font-size:15px}
+.chip input:checked+span{background:var(--accent);border-color:var(--accent);color:#fff}
+.pv{overflow-x:auto;border:1px solid var(--line);background:#fff;margin-bottom:10px}
+.pv canvas{display:block;width:100%;height:auto}
+.pv.zoom canvas{width:230%}
+button{font-family:inherit;font-size:16px;border:0;border-radius:10px;padding:13px;background:var(--accent);color:#fff;cursor:pointer}
+button.alt{background:#2f7d4f}
+button.sub{width:100%;background:#fff;color:var(--accent);border:1px solid var(--accent);margin-top:8px}
+button.danger{color:#b3261e;border-color:#b3261e}
+.bar{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;padding:10px 12px;background:rgba(255,255,255,.95);border-top:1px solid var(--line)}
+.bar button{flex:1}
+.note{font-size:12px;color:#666;margin:6px 0 0}
+</style>
+</head>
+<body>
+<header>工事受付表(川辺建設控)入力</header>
+<main>
+<div id="form"></div>
+<section>
+<h2>プレビュー</h2>
+<div class="pv" id="pv"><canvas id="cv"></canvas></div>
+<button type="button" class="sub" id="zoom">拡大して確認</button>
+<p class="note">入力内容はこの端末のブラウザにだけ自動保存されます。どこにも送信されません。</p>
+<button type="button" class="sub danger" id="clear">入力をすべて消して新規入力</button>
+</section>
+</main>
+<div class="bar">
+<button type="button" id="share">画像を共有(LINE・メール)</button>
+<button type="button" id="save" class="alt">画像を保存</button>
+</div>
+<script>
+(function(){
+var $=function(id){return document.getElementById(id)};
+var W=1754,H=1240,SC=2;
+var SANS='"Noto Sans JP","Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","Meiryo",sans-serif';
+var SERIF='"Noto Serif JP","Hiragino Mincho ProN","Yu Mincho","MS PMincho",serif';
+var KEY='kouji_uketsuke_draft_v1';
+
+var SECTIONS=[
+{title:'基本情報',items:[
+ {row:[{id:'kojiNo',label:'工事NO.'},{id:'ukeDate',label:'受付日',t:'date'}]},
+ {row:[{id:'uketsukesha',label:'川辺建設受付者'},{id:'sender',label:'送信者(右上のかっこ内)'}]},
+ {chips:{id:'irai',label:'依頼元',single:true,opts:[['ur','URコミュニティ 名古屋住まいセンター'],['kanri','管理事務所'],['kyoju','居住者'],['sonota','その他']]}},
+ {id:'iraisha',label:'依頼者'}
+]},
+{title:'場所・お客様',items:[
+ {id:'danchi',label:'団地名'},
+ {id:'goshitsu',label:'号棟・号室(場所)'},
+ {id:'shimei',label:'氏名'},
+ {row:[{id:'kibo1',label:'施工等希望日'},{id:'kibo2',label:'時間帯'}]}
+]},
+{title:'工事種目',items:[
+ {chips:{id:'shumoku',label:'工事種目(複数選べます)',single:false,opts:[['keijo','経常'],['kojin','個人負担'],['tenken','点検確認'],['tsuika','空家の追加'],['hoshu','保守管理'],['minaoshi','見直し工事'],['akiyaHoshu','空家補修工事'],['sonota','その他']]}}
+]},
+{title:'内容',items:[
+ {id:'naiyo',label:'補修内容',t:'textarea',rows:4}
+]},
+{title:'協力店・指示欄',items:[
+ {id:'kyoryoku0',label:'協力店名 1',t:'select'},
+ {id:'kyoryokuEtc0',label:'協力店 1 の名前(その他の場合)'},
+ {id:'shiji0',label:'指示内容',t:'textarea',rows:2},
+ {id:'kyoryoku1',label:'協力店名 2',t:'select'},
+ {id:'kyoryokuEtc1',label:'協力店 2 の名前(その他の場合)'},
+ {id:'shiji1',label:'指示内容',t:'textarea',rows:2},
+ {id:'kyoryoku2',label:'協力店名 3',t:'select'},
+ {id:'kyoryokuEtc2',label:'協力店 3 の名前(その他の場合)'},
+ {id:'shiji2',label:'指示内容',t:'textarea',rows:2},
+ {id:'kyoryoku3',label:'協力店名 4',t:'select'},
+ {id:'kyoryokuEtc3',label:'協力店 4 の名前(その他の場合)'},
+ {id:'shiji3',label:'指示内容',t:'textarea',rows:2}
+]},
+{title:'特記事項・備考',items:[
+ {id:'bikou',label:'備考欄',t:'textarea',rows:3}
+]}
+];
+
+var KYORYOKU=['有美社','納屋橋','桶庄','YNG','ビルメン','その他'];
+function fieldHTML(f){
+ var a='<div id="w_'+f.id+'"><label for="'+f.id+'">'+f.label+'</label>';
+ if(f.t==='select'){
+  return a+'<select id="'+f.id+'" data-k="'+f.id+'"><option value="">(選んでください)</option>'+KYORYOKU.map(function(n){return '<option value="'+n+'">'+n+'</option>';}).join('')+'</select></div>';
+ }
+ if(f.t==='textarea') return a+'<textarea id="'+f.id+'" data-k="'+f.id+'" rows="'+(f.rows||3)+'"></textarea></div>';
+ return a+'<input id="'+f.id+'" data-k="'+f.id+'" type="'+(f.t||'text')+'"></div>';
+}
+function chipsHTML(g){
+ var h='<label>'+g.label+'</label><div class="chips">';
+ g.opts.forEach(function(o){
+  h+='<div class="chip"><input type="checkbox" id="'+g.id+'_'+o[0]+'" data-k="'+g.id+'_'+o[0]+'" data-g="'+g.id+'" data-single="'+(g.single?1:0)+'"><span>'+o[1]+'</span></div>';
+ });
+ return h+'</div>';
+}
+(function build(){
+ var h='';
+ SECTIONS.forEach(function(s){
+  h+='<section><h2>'+s.title+'</h2>';
+  s.items.forEach(function(it){
+   if(it.row){h+='<div class="row">'+it.row.map(fieldHTML).join('')+'</div>';}
+   else if(it.chips){h+=chipsHTML(it.chips);}
+   else{h+=fieldHTML(it);}
+  });
+  h+='</section>';
+ });
+ $('form').innerHTML=h;
+})();
+
+var cv=$('cv');cv.width=W*SC;cv.height=H*SC;
+var ctx=cv.getContext('2d');
+
+function v(id){var e=$(id);return e?String(e.value||'').trim():'';}
+function on(k){var e=$(k);return !!(e&&e.checked);}
+function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function era(d){
+ if(!d)return null;
+ var p=d.split('-').map(Number),y=p[0],m=p[1],dd=p[2],e,ey;
+ if(d>='2019-05-01'){e='R';ey=y-2018;}else if(d>='1989-01-08'){e='H';ey=y-1988;}else{e='S';ey=y-1925;}
+ return {e:e,ey:ey,m:m,dd:dd};
+}
+function fmtShort(d){var o=era(d);return o?o.e+o.ey+'.'+o.m+'.'+o.dd:'';}
+function fmtKanji(d){var o=era(d);if(!o)return '';return {R:'令和',H:'平成',S:'昭和'}[o.e]+o.ey+'年'+o.m+'月'+o.dd+'日';}
+function md(d){if(!d)return '';var p=d.split('-');return (+p[1])+'/'+(+p[2]);}
+
+function font(size,serif){return '400 '+size+'px '+(serif?SERIF:SANS);}
+function text(s,x,y,size,o){
+ o=o||{};var sz=size;
+ ctx.font=font(sz,o.serif);
+ if(o.maxW){while(ctx.measureText(s).width>o.maxW&&sz>(o.min||10)){sz--;ctx.font=font(sz,o.serif);}}
+ ctx.textAlign=o.align||'left';ctx.textBaseline='middle';
+ ctx.fillText(s,x,y);
+ return ctx.measureText(s).width;
+}
+function wrapLines(s,maxW){
+ var out=[];
+ s.split('\n').forEach(function(p){
+  var cur='';
+  for(var i=0;i<p.length;i++){
+   var ch=p[i];
+   if(cur&&ctx.measureText(cur+ch).width>maxW){out.push(cur);cur=ch;}else{cur+=ch;}
+  }
+  out.push(cur);
+ });
+ return out;
+}
+function box(s,x,y,w,h,max,min,serif){
+ if(!s)return;
+ var sz=max,lines,lh;
+ for(;;){
+  ctx.font=font(sz,serif);lines=wrapLines(s,w);lh=sz*1.35;
+  if(lines.length*lh<=h||sz<=min)break;
+  sz--;
+ }
+ ctx.textAlign='left';ctx.textBaseline='top';
+ lines.forEach(function(l,i){if((i+1)*lh<=h+lh*0.25)ctx.fillText(l,x,y+i*lh);});
+}
+function item(label,x,y,size,sel){
+ ctx.font=font(size);ctx.textAlign='left';ctx.textBaseline='middle';
+ var s='・'+label;
+ ctx.fillText(s,x,y);
+ var w=ctx.measureText(s).width;
+ if(sel){
+  ctx.lineWidth=2;ctx.beginPath();
+  ctx.arc(x+size*0.5,y,Math.max(size*0.62,10),0,Math.PI*2);ctx.stroke();
+ }
+ return x+w;
+}
+
+function updateEtc(){
+ for(var k=0;k<4;k++){
+  var w=$('w_kyoryokuEtc'+k);
+  if(w)w.style.display=(v('kyoryoku'+k)==='その他')?'':'none';
+ }
+}
+function draw(){
+ updateEtc();
+ ctx.setTransform(SC,0,0,SC,0,0);
+ ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+ ctx.strokeStyle='#000';ctx.fillStyle='#000';ctx.lineCap='butt';
+ function ln(x1,y1,x2,y2){ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+ function lab(s,x,y,size){text(s,x,y,size||22,{align:'center'});}
+
+ /* 罫線 */
+ ln(60,220,465,220);ln(1090,220,1694,220);
+ ln(60,341,1694,341);ln(60,374,1694,374);ln(60,432,1694,432);
+ ln(929,403,1179,403);
+ ln(60,466,275,466);ln(275,466,464,466);ln(934,466,1089,466);
+ ln(275,432,275,622);ln(464,432,464,466);ln(933,432,933,622);ln(1089,432,1089,466);
+ ln(60,622,1694,622);ln(60,658,1694,658);ln(60,804,1694,804);
+ ln(1200,713,1694,713);ln(1200,747,1694,747);
+ [688,716,746,775].forEach(function(y){ln(595,y,1200,y);});
+ ln(60,845,1694,845);
+ [901,958,1015].forEach(function(y){ln(60,y,595,y);});
+ ln(60,1072,1694,1072);
+ ln(60,1106,200,1106);ln(200,1072,200,1106);
+ [268,465,1090,1381,1541].forEach(function(x){ln(x,180,x,341);});
+ [272,590,929,1179,1446].forEach(function(x){ln(x,341,x,432);});
+ [595,1200,1560].forEach(function(x){ln(x,622,x,804);});
+ ln(411,804,411,1072);ln(595,804,595,1072);
+ ctx.lineWidth=3.5;ctx.strokeRect(60,180,1634,1030);
+
+ /* 右上の会社情報 */
+ var ukeDate=v('ukeDate');
+ text('川辺建設株式会社',1684,60,30,{align:'right'});
+ text('TEL  052-931-0181',1684,94,22,{align:'right'});
+ text('FAX  052-931-0187',1684,121,22,{align:'right'});
+ text(fmtKanji(ukeDate),1440,152,22,{align:'right'});
+ var lw=text('送信者(',1478,152,22);
+ var sx=1478+lw+4;
+ text(v('sender'),sx,152,22,{maxW:1684-sx-10,min:12});
+ text(')',1692,152,22,{align:'right'});
+
+ /* 見出し */
+ lab('工事NO.',164,200);lab('受付日',366,200);
+ lab('依頼元',1235,200);lab('依頼者',1461,200);lab('川辺建設受付者',1617,200,17);
+ text('工事受付表(川辺建設控)',777,262,38,{align:'center'});
+ lab('団地名',166,358);lab('号棟・号室(場所)',431,358);lab('氏　名',759,358);lab('電　話',1054,358);lab('施工等希望日',1312,358);
+ lab('入居日',167,450);lab('補修内容',370,450);lab('指示欄',1011,450);
+ lab('経常負担区分',327,640);lab('工事種目',897,640);lab('経常伝票NO.',1380,640);lab('工事担当者',1627,640,18);
+ lab('経常伝票工期',1380,730);lab('伝票日付',1627,730,20);
+ lab('協力店名',235,825);lab('完了日',503,825);lab('特記事項',1144,825);
+ lab('備考欄',130,1090);
+
+ /* 1段目 */
+ text(v('kojiNo'),164,280,32,{align:'center',serif:true,maxW:180,min:14});
+ text(fmtShort(ukeDate),366,280,40,{align:'center',serif:true,maxW:185,min:20});
+ item('URコミュニティ 名古屋住まいセンター',1103,236,14,on('irai_ur'));
+ item('管理事務所(',1106,266,20,on('irai_kanri'));
+ text(')',1362,266,20);
+ item('居住者',1106,294,20,on('irai_kyoju'));
+ item('その他(',1106,323,20,on('irai_sonota'));
+ text(')',1362,323,20);
+ box(v('iraisha'),1391,232,140,100,26,12,true);
+ box(v('uketsukesha'),1551,232,135,100,26,12,true);
+
+ /* 2段目 */
+ text(v('danchi'),72,403,26,{serif:true,maxW:190,min:12});
+ text(v('goshitsu'),284,403,26,{serif:true,maxW:296,min:12});
+ text(v('shimei'),602,403,28,{serif:true,maxW:318,min:12});
+ text('(自宅)',937,388,13);
+ text('(携帯)',937,417,13);
+ text(v('kibo1'),1191,403,24,{serif:true,maxW:245,min:11});
+ text(v('kibo2'),1458,403,24,{serif:true,maxW:228,min:11});
+
+ /* 3段目 */
+ box(v('naiyo'),285,474,640,142,28,14,true);
+ var shijiLines=[];
+ for(var si=0;si<4;si++){var sv=v('shiji'+si);if(sv)shijiLines.push((si+1)+'. '+sv);}
+ box(shijiLines.join('\n'),944,474,740,142,28,12,true);
+
+ /* 4段目 */
+ item('都市機構',142,732,22,false);
+ item('居住者',332,732,22,false);
+ item('瑕疵',482,732,22,false);
+ item('経常',615,673,20,on('shumoku_keijo'));
+ item('個人負担',928,673,20,on('shumoku_kojin'));
+ item('点検確認',615,702,20,on('shumoku_tenken'));
+ /* 点検確認書添付のチェック箱 */
+ ctx.lineWidth=2;ctx.strokeRect(736,693.5,17,17);
+ text('点検確認書添付',758,702,20);
+ item('空家の追加',615,731,20,on('shumoku_tsuika'));
+ item('保守管理',615,760,20,on('shumoku_hoshu'));
+ item('見直し工事',928,760,20,on('shumoku_minaoshi'));
+ item('空家補修工事',615,790,20,on('shumoku_akiyaHoshu'));
+ item('その他(',928,790,20,on('shumoku_sonota'));
+ text(')',1186,790,20);
+ text('〜',1380,777,24,{align:'center'});
+
+ /* 5段目 */
+ var ys=[873,930,987,1044];
+ for(var i=0;i<4;i++){
+  text((i+1)+'.',77,ys[i],24,{serif:true});
+  var kn=v('kyoryoku'+i);
+  if(kn==='その他')kn=v('kyoryokuEtc'+i)||'その他';
+  text(kn,112,ys[i],26,{serif:true,maxW:290,min:12});
+  text('/',503,ys[i],24,{align:'center',serif:true});
+ }
+ box(v('bikou'),72,1112,1612,92,28,14,true);
+}
+
+var pending=false;
+function schedule(){if(pending)return;pending=true;requestAnimationFrame(function(){pending=false;draw();});}
+
+/* 自動保存(この端末のブラウザ内だけ) */
+function collect(){
+ var o={};
+ document.querySelectorAll('[data-k]').forEach(function(e){o[e.dataset.k]=(e.type==='checkbox')?e.checked:e.value;});
+ return o;
+}
+function draftSave(){try{var o=collect();delete o.ukeDate;delete o.sender;localStorage.setItem(KEY,JSON.stringify(o));}catch(e){}}
+function draftLoad(){
+ try{
+  var s=localStorage.getItem(KEY);if(!s)return;
+  var o=JSON.parse(s);
+  document.querySelectorAll('[data-k]').forEach(function(e){
+   var k=e.dataset.k;if(!(k in o)||k==='sender'||k==='ukeDate')return;
+   if(e.type==='checkbox')e.checked=!!o[k];else e.value=o[k];
+  });
+ }catch(e){}
+}
+function defaults(){
+ document.querySelectorAll('[data-k]').forEach(function(e){if(e.type==='checkbox')e.checked=false;else e.value='';});
+ $('ukeDate').value=today();
+ $('sender').value='千田';
+ $('irai_ur').checked=true;
+}
+
+function onAnyChange(e){
+ var t=e.target;
+ if(t&&t.type==='checkbox'&&t.dataset.single==='1'&&t.checked){
+  document.querySelectorAll('input[data-g="'+t.dataset.g+'"]').forEach(function(o){if(o!==t)o.checked=false;});
+ }
+ schedule();draftSave();
+}
+document.addEventListener('input',onAnyChange);
+document.addEventListener('change',onAnyChange);
+
+/* 画像の保存・共有 */
+function fname(){
+ var p=[v('danchi'),v('goshitsu')].filter(Boolean).join('_').replace(/[\\\/:*?"<>|]/g,'-');
+ return '工事受付表'+(p?'_'+p:'')+'.png';
+}
+function getBlob(){draw();return new Promise(function(r){cv.toBlob(r,'image/png');});}
+function saveImage(b){
+ var a=document.createElement('a');
+ a.href=URL.createObjectURL(b);a.download=fname();
+ document.body.appendChild(a);a.click();
+ setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1500);
+}
+$('save').onclick=function(){getBlob().then(saveImage);};
+$('share').onclick=function(){
+ getBlob().then(function(b){
+  var f=new File([b],fname(),{type:'image/png'});
+  if(navigator.canShare&&navigator.canShare({files:[f]})){
+   navigator.share({files:[f],title:'工事受付表'}).catch(function(err){if(err&&err.name!=='AbortError')saveImage(b);});
+  }else{
+   saveImage(b);
+   alert('この環境では共有メニューが使えないため、画像を保存しました。保存した画像をLINEやメールに添付してください。');
+  }
+ });
+};
+$('zoom').onclick=function(){
+ var z=$('pv').classList.toggle('zoom');
+ $('zoom').textContent=z?'縮小して全体を見る':'拡大して確認';
+};
+$('clear').onclick=function(){
+ if(!confirm('入力した内容をすべて消して、新規入力にします。よろしいですか?'))return;
+ defaults();draftSave();draw();window.scrollTo(0,0);
+};
+
+defaults();draftLoad();draw();
+if(document.fonts&&document.fonts.ready){document.fonts.ready.then(draw);}
+window.__draw=draw;
+})();
+</script>
+</body>
+</html>
